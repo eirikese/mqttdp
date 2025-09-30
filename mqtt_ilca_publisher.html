@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<title>MQTT ILCA7 Sailboat Publisher</title>
+	<script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+	<style>
+		:root{--bg:#0b0d10;--card:#151a20;--fg:#e8eef5;--muted:#99a6b3;--accent:#ffcc33;--bad:#ff5d5d;--ok:#4cd964}
+		html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif}
+		.wrap{max-width:980px;margin:0 auto;padding:18px}
+		h1{font-size:20px;margin:0 0 12px 0}
+		.row{display:flex;gap:14px;flex-wrap:wrap}
+		.card{background:var(--card);border:1px solid #1f2730;border-radius:10px;padding:14px;flex:1}
+		.half{flex:1 1 420px}
+		.grow{flex:1 1 100%}
+		label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+		input,select{width:100%;box-sizing:border-box;background:#0e1318;color:var(--fg);border:1px solid #2a323c;border-radius:8px;padding:8px}
+		input[type="checkbox"]{width:auto}
+		.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+		.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+		button{background:var(--accent);color:#000;border:0;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
+		button.secondary{background:#2b3440;color:var(--fg)}
+		.status{font-weight:700}
+		.ok{color:var(--ok)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+		.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+		.log{background:#0e1318;border:1px solid #2a323c;border-radius:8px;min-height:120px;max-height:280px;overflow:auto;padding:10px;white-space:pre-wrap}
+		.tiny{font-size:12px;color:var(--muted)}
+		hr{border:0;border-top:1px solid #202832;margin:10px 0}
+	</style>
+</head>
+<body>
+	<div class="wrap">
+		<h1>MQTT ILCA7 Sailboat Publisher</h1>
+
+		<div class="row">
+			<div class="card half">
+				<div style="font-weight:700;margin-bottom:8px;">Connection</div>
+				<div class="grid">
+					<div><label>Host</label><input id="host" value="afe7881f82fe42929e4a5370cddc7285.s1.eu.hivemq.cloud"></div>
+					<div><label>WSS Port</label><input id="port" value="8884"></div>
+					<div><label>Path</label><input id="path" value="/mqtt"></div>
+					<div><label>Username</label><input id="user" value="wildsailor" placeholder="HiveMQ Cloud username"></div>
+					<div><label>Password</label><input id="pass" type="password" value="Sailorinthewild1" placeholder="HiveMQ Cloud password"></div>
+					<div><label>Client ID (auto if blank)</label><input id="cid" placeholder="web-xxxx"></div>
+					<div><label>Unit ID</label><input id="unit" value="ilca7_pub"></div>
+				</div>
+				<div class="tiny" style="margin-top:6px;">URL: <span id="url" class="mono muted"></span></div>
+				<div class="tiny">Status: <span id="status" class="status bad">disconnected</span></div>
+				<div class="btns">
+					<button id="btnConnect">Connect</button>
+					<button id="btnDisconnect" class="secondary">Disconnect</button>
+				</div>
+			</div>
+
+			<div class="card half">
+				<div style="font-weight:700;margin-bottom:8px;">Publish m5/&lt;unit_id&gt;/telemetry</div>
+				<div class="grid">
+					<div><label>roll_deg (auto)</label><input id="roll" value="0.00" readonly></div>
+					<div><label>pitch_deg (auto)</label><input id="pitch" value="0.00" readonly></div>
+					<div><label>lat</label><input id="lat" placeholder="63.4576"></div>
+					<div><label>lon</label><input id="lon" placeholder="10.3506"></div>
+					<div><label>Interval (ms)</label><input id="interval" value="100"></div>
+					<div style="display:flex;align-items:center;gap:8px;margin-top:22px;">
+						<input type="checkbox" id="rand"> <label for="rand" style="margin:0;">Extra heel wobble</label>
+					</div>
+				</div>
+				<div class="btns">
+					<button id="btnToggleAuto">Start Auto</button>
+					<button id="btnPubOnce" class="secondary">Publish Once</button>
+				</div>
+				<div class="tiny" style="margin-top:6px;">Topic: <span id="topic" class="mono muted"></span></div>
+			</div>
+		</div>
+
+		<!-- ILCA7 Sailboat Simulator -->
+		<div class="row">
+			<div class="card grow">
+				<div style="font-weight:700;margin-bottom:8px;">Sailboat Simulator — ILCA7 (with tacks/gybes and natural heel)</div>
+				<div class="grid">
+					<div>
+						<label>True Wind Direction (° from North)</label>
+						<input id="windDirDeg" value="60">
+					</div>
+					<div>
+						<label>True Wind Speed (kn)</label>
+						<input id="windKn" value="12">
+					</div>
+					<div>
+						<label>Sailing Mode</label>
+						<select id="sailMode">
+							<option value="upwind" selected>Upwind (auto tacking)</option>
+							<option value="broad">Broad reach (auto gybe)</option>
+							<option value="downwind">Downwind (auto gybe)</option>
+						</select>
+					</div>
+					<div>
+						<label>Tack/Gybe Period (s)</label>
+						<input id="tackPeriod" value="35">
+					</div>
+					<div>
+						<label>Upwind TWA (° each tack)</label>
+						<input id="upwindTwa" value="42">
+					</div>
+					<div>
+						<label>Broad Reach TWA (°)</label>
+						<input id="broadTwa" value="125">
+					</div>
+					<div>
+						<label>Downwind TWA (°)</label>
+						<input id="downTwa" value="170">
+					</div>
+					<div>
+						<label>Heading Response (°/s)</label>
+						<input id="turnRateDeg" value="20">
+					</div>
+					<div>
+						<label>Wave Pitch Amp (°)</label>
+						<input id="waveAmp" value="0.8">
+					</div>
+					<div>
+						<label>Wave Period (s)</label>
+						<input id="wavePeriod" value="4.0">
+					</div>
+					<div>
+						<label>Heel Max (° @ strong AWA/AWS)</label>
+						<input id="heelMax" value="25">
+					</div>
+					<div>
+						<label>Fjord Bounds</label>
+						<select id="startPreset">
+							<option value="munkholmen" selected>Munkholmen</option>
+							<option value="brattora">Brattøra</option>
+							<option value="lade">Lade</option>
+						</select>
+					</div>
+				</div>
+				<div class="btns">
+					<button id="btnReset">Reset Boat</button>
+				</div>
+				<div class="tiny" style="margin-top:6px;">
+					Bounds: 63.35°–63.52° N, 10.20°–10.60° E (soft clamp). Boat speed/heel from simple ILCA7 polar + apparent wind.
+				</div>
+				<hr>
+				<div class="tiny">
+					Debug: <span id="dbg" class="mono muted"></span>
+				</div>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="card grow">
+				<div style="font-weight:700;margin-bottom:8px;">Log</div>
+				<pre id="log" class="log"></pre>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		const $ = id => document.getElementById(id);
+		let client=null, timer=null, seq=0;
+
+		// --- Area bounds (Trondheim fjord-ish) ---
+		const fjordBounds = { latMin: 63.35, latMax: 63.52, lonMin: 10.20, lonMax: 10.60 };
+
+		// --- Boat state ---
+		let boat = {
+			lat: null, lon: null,
+			headingDeg: 45,      // course over ground
+			targetHeadingDeg: 45,
+			tackSign: 1,         // +1 or -1 (which side of wind)
+			lastFlipT: 0,        // last tack/gybe timestamp (ms)
+			vBoat_ms: 0,         // boat speed over water (m/s)
+			rollDeg: 0,          // heel (+ starboard, - port)
+			pitchDeg: 0,
+			timeMs: 0
+		};
+
+		// --- Helpers ---
+		const nowMs = () => performance.now();
+		const clamp = (v,min,max)=>Math.min(max,Math.max(min,v));
+		const wrap360 = d => ((d%360)+360)%360;
+		const angDiff = (a,b) => {
+			let d = wrap360(a)-wrap360(b);
+			if(d>180) d-=360;
+			if(d<-180) d+=360;
+			return d;
+		};
+		const metersToDegrees = (latDeg, dNorth, dEast) => {
+			const R=6378137;
+			const dLat=(dNorth/R)*(180/Math.PI);
+			const dLon=(dEast/(R*Math.cos(latDeg*Math.PI/180)))*(180/Math.PI);
+			return {dLat,dLon};
+		};
+		const clampToBounds=(lat,lon)=>{
+			let bounced=false;
+			if(lat<fjordBounds.latMin){lat=fjordBounds.latMin; bounced=true;}
+			if(lat>fjordBounds.latMax){lat=fjordBounds.latMax; bounced=true;}
+			if(lon<fjordBounds.lonMin){lon=fjordBounds.lonMin; bounced=true;}
+			if(lon>fjordBounds.lonMax){lon=fjordBounds.lonMax; bounced=true;}
+			return {lat,lon,bounced};
+		};
+
+		// Random helpers
+		function randn(){
+			// Box–Muller transform for approximately normal noise
+			let u=0, v=0;
+			while(u===0) u=Math.random();
+			while(v===0) v=Math.random();
+			return Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+		}
+
+		// Gust state for smooth speed variation
+		const gustState = { level:1.0, oscPhase:0 };
+		function gustMultiplier(dt){
+			// Ornstein–Uhlenbeck process around 1.0 with a tiny sine wobble
+			const theta = 0.35;     // mean reversion (1/s)
+			const sigma = 0.08;     // volatility
+			const oscAmp = 0.03;    // small periodic chop
+			const oscPeriod = 10.0; // seconds
+			const sdt = Math.sqrt(Math.max(dt, 1e-3));
+			gustState.level += theta*(1.0 - gustState.level)*dt + sigma*sdt*randn();
+			gustState.oscPhase += 2*Math.PI*dt/oscPeriod;
+			let mult = gustState.level + oscAmp*Math.sin(gustState.oscPhase);
+			return clamp(mult, 0.85, 1.15);
+		}
+
+		function log(msg){
+			const el=$('log');
+			const d=new Date();
+			const ts=d.toISOString().split('T')[1].replace('Z','');
+			el.textContent += `[${ts}] ${msg}\n`;
+			el.scrollTop = el.scrollHeight;
+		}
+		function setStatus(ok,text){ const s=$('status'); s.textContent=text; s.className='status '+(ok?'ok':'bad'); }
+
+		function computeUrl(){
+			const url=`wss://${$('host').value.trim()}:${$('port').value.trim()}${$('path').value.trim()||'/mqtt'}`;
+			$('url').textContent=url; return url;
+		}
+		function topic(){
+			const t=`m5/${($('unit').value.trim()||'web-test')}/telemetry`;
+			$('topic').textContent=t; return t;
+		}
+
+		// --- Connection ---
+		function connect(){
+			if(client){ try{client.end(true);}catch(e){} client=null; }
+			const url=computeUrl();
+			const cid=$('cid').value.trim() || ('web-'+Math.random().toString(16).slice(2,10));
+			const user=$('user').value || undefined;
+			const pass=$('pass').value || undefined;
+			const willTopic = `m5/${($('unit').value.trim()||'web-test')}/status`;
+
+			log(`connecting ${url} as ${cid} ...`);
+			try{
+				client=mqtt.connect(url,{
+					protocolVersion:4, clean:true, clientId:cid,
+					username:user, password:pass, keepalive:20, reconnectPeriod:0,
+					will:{topic:willTopic,payload:'offline',qos:0,retain:true}
+				});
+			}catch(err){ log('connect() threw: '+err); setStatus(false,'error'); return; }
+
+			client.on('connect',()=>{ setStatus(true,'connected'); log('connected'); client.publish(willTopic,'online',{retain:true,qos:0}); });
+			client.on('error',e=>{ log('error: '+e.message); setStatus(false,'error'); });
+			client.on('close',()=>{ log('closed'); setStatus(false,'disconnected'); });
+			client.on('reconnect',()=>{ log('reconnecting...'); });
+		}
+		function disconnect(){
+			if(timer){ clearInterval(timer); timer=null; $('btnToggleAuto').textContent='Start Auto'; }
+			if(client){ try{client.end(true);}catch(e){} client=null; }
+			setStatus(false,'disconnected'); log('disconnected');
+		}
+
+		// --- Polar model for ILCA7 (very simple, capped) ---
+		// Returns boat speed (kn) given TWA (deg, 0=head to wind) and TWS (kn).
+		function ilca7PolarKn(twaDeg, twsKn){
+			const twa = Math.abs(((twaDeg%360)+360)%360);
+			const a = Math.min(Math.max(twsKn, 2), 25); // clamp wind for model
+			// baseline percentages of TWS by angle, then cap by Vmax envelope
+			let perc;
+			if(twa<35) perc = 0.0;
+			else if(twa<50) perc = 0.48 + 0.02*((twa-35)/15);   // ~0.48–0.50
+			else if(twa<80) perc = 0.52 + 0.10*((twa-50)/30);   // up to ~0.62 near 80
+			else if(twa<110) perc = 0.62 + 0.05*((twa-80)/30);  // ~0.67 near 110
+			else if(twa<140) perc = 0.67 + 0.03*((twa-110)/30); // ~0.70 near 140
+			else perc = 0.62; // deeper angles slow a bit
+
+			let v = perc * a;
+			// speed caps (kn) roughly plausible for ILCA7
+			const vmaxByTwa =
+				twa<55 ? 6.0 :
+				twa<90 ? 6.4 :
+				twa<120? 7.0 :
+				twa<150? 7.2 : 6.6;
+			v = Math.min(v, vmaxByTwa);
+			return Math.max(0, v);
+		}
+
+		// Apparent wind from true wind and boat velocity
+		// Inputs: headings in deg from North, speeds in m/s. Returns {aws_ms, awa_deg_absolute}
+		function apparentWind(headingDeg, vBoat_ms, twdDeg, tws_ms){
+			// true wind vector (from twd, blowing towards twd+180)
+			const twToDeg = wrap360(twdDeg+180);
+			const twRad = twToDeg*Math.PI/180;
+			const twx = Math.sin(twRad)*tws_ms;
+			const twy = Math.cos(twRad)*tws_ms;
+
+			// boat velocity vector (towards heading)
+			const bh = headingDeg*Math.PI/180;
+			const bx = Math.sin(bh)*vBoat_ms;
+			const by = Math.cos(bh)*vBoat_ms;
+
+			// apparent = true - boat
+			const ax = twx - bx;
+			const ay = twy - by;
+			const aws = Math.hypot(ax,ay);
+			let awaFromNorth = Math.atan2(ax,ay)*180/Math.PI; // direction wind is going to, absolute
+			awaFromNorth = wrap360(awaFromNorth);
+			// convert to relative angle off bow (0 = head-on, + to starboard, - to port)
+			let awaRel = angDiff(awaFromNorth, headingDeg);
+			return { aws_ms: aws, awa_rel_deg: awaRel, awa_abs_deg: awaFromNorth };
+		}
+
+		// Heel model (deg): peaks near beam reach, scales with AWS^1.3 and damps upwind/downwind
+		function heelFromApparent(awaRelDeg, aws_ms, heelMax){
+			const awa = Math.abs(awaRelDeg);
+			const aws_kn = aws_ms * 1.94384;
+			const windFactor = Math.pow(clamp(aws_kn/12, 0, 2), 1.3); // ref 12 kn
+			// angular factor: 0 at head-to-wind & dead downwind, 1 near 90°
+			const angFactor = Math.sin(awa*Math.PI/180);
+			const base = heelMax * windFactor * angFactor;
+			// soften extremes <35° and >170°
+			const soft =
+				awa<35 ? base*(awa/35) :
+				awa>170 ? base*((180-awa)/10) : base;
+			return clamp(soft, 0, heelMax*1.2);
+		}
+
+		function pitchFromWaves(t, ampDeg, periodS, speed_ms){
+			const w = (2*Math.PI/Math.max(periodS,0.5));
+			// tie frequency slightly to speed for variety
+			const f = w*(1 + 0.15*clamp(speed_ms/4,0,1));
+			return ampDeg * Math.sin(f*t) + 0.2*ampDeg*Math.sin(0.37*f*t + 1.2);
+		}
+
+		function presetToLatLon(preset){
+			switch(preset){
+				case 'munkholmen': return { lat: 63.4576, lon: 10.3506 };
+				case 'lade': return { lat: 63.4540, lon: 10.4620 };
+				case 'brattora':
+				default: return { lat: 63.4412, lon: 10.4063 };
+			}
+		}
+
+		function resetBoat(){
+			const p = presetToLatLon($('startPreset').value);
+			boat.lat = p.lat;
+			boat.lon = p.lon;
+			// Start close-hauled on starboard by default
+			const twd = parseFloat($('windDirDeg').value)||60;
+			const upTwa = parseFloat($('upwindTwa').value)||42;
+			boat.tackSign = 1;
+			boat.headingDeg = wrap360(twd + boat.tackSign*upTwa);
+			boat.targetHeadingDeg = boat.headingDeg;
+			boat.vBoat_ms = 0;
+			boat.rollDeg = 0; boat.pitchDeg = 0;
+			boat.lastFlipT = nowMs();
+			boat.timeMs = 0;
+			// Reset gust model
+			gustState.level = 1.0; gustState.oscPhase = 0;
+			$('lat').value = boat.lat.toFixed(6);
+			$('lon').value = boat.lon.toFixed(6);
+			log(`Boat reset to ${boat.lat.toFixed(6)}, ${boat.lon.toFixed(6)} hdg ${boat.headingDeg.toFixed(1)}°`);
+		}
+
+		function updateTargetHeading(mode){
+			const twd = parseFloat($('windDirDeg').value)||60;
+			const upTwa = parseFloat($('upwindTwa').value)||42;
+			const brTwa = parseFloat($('broadTwa').value)||125;
+			const dwTwa = parseFloat($('downTwa').value)||170;
+
+			if(mode==='upwind'){
+				boat.targetHeadingDeg = wrap360(twd + boat.tackSign*upTwa);
+			}else if(mode==='broad'){
+				boat.targetHeadingDeg = wrap360(twd + boat.tackSign*brTwa);
+			}else{ // downwind
+				boat.targetHeadingDeg = wrap360(twd + boat.tackSign*dwTwa);
+			}
+		}
+
+		function maybeFlip(mode, dt){
+			const tNow = nowMs();
+			const periodMs = Math.max(5, parseFloat($('tackPeriod').value)||35) * 1000;
+			let flipped = false;
+
+			if(tNow - boat.lastFlipT > periodMs){
+				boat.tackSign *= -1;
+				boat.lastFlipT = tNow;
+				flipped = true;
+			}
+			// Edge bounce -> flip side
+			// (keeps us inside the box similarly to waves turning you)
+			const {lat,lon} = boat;
+			if(lat<=fjordBounds.latMin || lat>=fjordBounds.latMax || lon<=fjordBounds.lonMin || lon>=fjordBounds.lonMax){
+				boat.tackSign *= -1;
+				boat.lastFlipT = tNow;
+				flipped = true;
+			}
+			if(flipped) updateTargetHeading(mode);
+		}
+
+		function steerTowardsTarget(dt){
+			const turnRate = Math.max(5, parseFloat($('turnRateDeg').value)||20); // deg/s
+			const maxStep = turnRate * dt;
+			const d = angDiff(boat.targetHeadingDeg, boat.headingDeg);
+			const jitter = (Math.random()*2-1) * 5; // tiny wander
+			let step = clamp(d, -maxStep, maxStep) + jitter;
+			boat.headingDeg = wrap360(boat.headingDeg + step);
+		}
+
+		function advanceBoat(dt){
+			// Read environment
+			const twd = parseFloat($('windDirDeg').value)||60;
+			const twsKn = Math.max(0, parseFloat($('windKn').value)||10);
+			const tws_ms = twsKn * 0.514444;
+
+			// Decide heading (mode/tack/gybe)
+			const mode = $('sailMode').value;
+			maybeFlip(mode, dt);
+			updateTargetHeading(mode);
+			steerTowardsTarget(dt);
+
+			// Compute speed from polar
+			const twa = Math.abs(angDiff(boat.headingDeg, twd));
+			const vBoat_kn = ilca7PolarKn(twa, twsKn);
+			// Smooth gustiness + inertia
+			const g = gustMultiplier(dt);
+			const target_ms = Math.max(0, vBoat_kn*0.514444*g);
+			// First-order lag toward target (time constant ~2.5 s)
+			const tau = 2.5;
+			const alpha = clamp(dt/(tau+dt), 0, 1);
+			boat.vBoat_ms = boat.vBoat_ms + alpha*(target_ms - boat.vBoat_ms);
+
+			// Apparent wind & heel
+			const app = apparentWind(boat.headingDeg, boat.vBoat_ms, twd, tws_ms);
+			const heelMax = Math.max(10, parseFloat($('heelMax').value)||25);
+			let heel = heelFromApparent(app.awa_rel_deg, app.aws_ms, heelMax);
+			// sign to leeward: if wind is coming from starboard (AWA negative), heel to port (negative)
+			const sign = (app.awa_rel_deg >= 0) ? +1 : -1; // + starboard heel, - port heel
+			heel *= sign;
+
+			// Extra small random roll wobble if enabled
+			if($('rand').checked){
+				heel += (Math.random()*2-1) * 0.8;
+			}
+
+			// Pitch (waves)
+			boat.timeMs += dt*1000;
+			const pitch = pitchFromWaves(boat.timeMs/1000, parseFloat($('waveAmp').value)||0.8, parseFloat($('wavePeriod').value)||4.0, boat.vBoat_ms);
+
+			// Integrate position
+			const dist = boat.vBoat_ms * dt;
+			const rad = boat.headingDeg*Math.PI/180;
+			const dNorth = Math.cos(rad) * dist;
+			const dEast  = Math.sin(rad) * dist;
+			let {dLat, dLon} = metersToDegrees(boat.lat, dNorth, dEast);
+			let newLat = boat.lat + dLat;
+			let newLon = boat.lon + dLon;
+
+			const clamped = clampToBounds(newLat, newLon);
+			boat.lat = clamped.lat; boat.lon = clamped.lon;
+			boat.rollDeg = heel;
+			boat.pitchDeg = pitch;
+
+			$('lat').value = boat.lat.toFixed(6);
+			$('lon').value = boat.lon.toFixed(6);
+			$('roll').value = boat.rollDeg.toFixed(2);
+			$('pitch').value = boat.pitchDeg.toFixed(2);
+
+			// Debug text
+			const dbg = `HDG:${boat.headingDeg.toFixed(1)}°  TWA:${twa.toFixed(0)}°  SOG:${(boat.vBoat_ms*1.94384).toFixed(2)} kn  AWA:${app.awa_rel_deg.toFixed(0)}°  AWS:${(app.aws_ms*1.94384).toFixed(1)} kn  Heel:${boat.rollDeg.toFixed(1)}°`;
+			$('dbg').textContent = dbg;
+		}
+
+		function buildPayload(){
+			const unit = $('unit').value.trim() || 'web-test';
+			const payload = {
+				unit_id: unit,
+				seq: seq++,
+				roll_deg: +boat.rollDeg.toFixed(2),
+				pitch_deg: +boat.pitchDeg.toFixed(2),
+				lat: +boat.lat.toFixed(6),
+				lon: +boat.lon.toFixed(6)
+			};
+			return JSON.stringify(payload);
+		}
+
+		function publishOnce(){
+			if(!client || !client.connected){ log('not connected'); return; }
+			const ms = Math.max(50, parseInt(($('interval').value||'1000').trim(),10)||1000);
+			advanceBoat(ms/1000);
+			const t = topic();
+			const payload = buildPayload();
+			client.publish(t, payload, {qos:0, retain:false}, (err)=>{
+				if(err){ log('publish error: '+err); }
+				else{ log(`PUB ${t} ${payload}`); }
+			});
+		}
+
+		function toggleAuto(){
+			if(timer){ clearInterval(timer); timer=null; $('btnToggleAuto').textContent='Start Auto'; log('auto stopped'); return; }
+			const ms = Math.max(50, parseInt(($('interval').value||'1000').trim(),10)||1000);
+			$('interval').value = String(ms);
+			timer = setInterval(()=>{ publishOnce(); }, ms);
+			$('btnToggleAuto').textContent='Stop Auto';
+			log('auto started: '+ms+' ms');
+		}
+
+		// Wire up
+		$('btnConnect').addEventListener('click', connect);
+		$('btnDisconnect').addEventListener('click', disconnect);
+		$('btnPubOnce').addEventListener('click', publishOnce);
+		$('btnToggleAuto').addEventListener('click', toggleAuto);
+		['host','port','path','unit'].forEach(id=>$(id).addEventListener('input',()=>{ computeUrl(); topic(); }));
+		$('btnReset').addEventListener('click', resetBoat);
+		$('sailMode').addEventListener('change', ()=>updateTargetHeading($('sailMode').value));
+		$('startPreset').addEventListener('change', resetBoat);
+
+		// Init
+		computeUrl(); topic(); resetBoat();
+	</script>
+</body>
+</html>
