@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1"/>
-	<title>MQTT ILCA7 Sailboat Publisher</title>
+	<title>MQTT ILCA7 Publisher</title>
 	<script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
 	<style>
 		:root{--bg:#0b0d10;--card:#151a20;--fg:#e8eef5;--muted:#99a6b3;--accent:#ffcc33;--bad:#ff5d5d;--ok:#4cd964}
@@ -30,8 +30,25 @@
 	</style>
 </head>
 <body>
+	<div id="pwGate" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(11,13,16,0.98);z-index:9999;display:flex;align-items:center;justify-content:center;">
+		<div style="background:#151a20;border-radius:12px;padding:32px 24px;box-shadow:0 2px 24px #0006;text-align:center;max-width:90vw;">
+			<h2 style="color:#ffcc33;margin-bottom:18px;">Enter Password</h2>
+			<input id="pwInput" type="password" placeholder="Password" style="padding:10px 16px;font-size:18px;border-radius:8px;border:1px solid #2a323c;width:220px;max-width:80vw;margin-bottom:12px;" autofocus>
+			<br>
+			<button id="pwBtn" style="background:#ffcc33;color:#222;font-weight:700;padding:10px 24px;border-radius:8px;border:0;font-size:16px;cursor:pointer;">Unlock</button>
+			<div id="pwMsg" style="color:#ff5d5d;margin-top:10px;font-size:14px;display:none;">Wrong password</div>
+		</div>
+	</div>
+	<!-- iPhone Home Screen Compatibility -->
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="default">
+	<meta name="apple-mobile-web-app-title" content="MQTT ILCA Publisher">
+	<link rel="apple-touch-icon" href="/github-io/icon-192.png">
+	<!-- Optional: PWA manifest -->
+	<link rel="manifest" href="/github-io/manifest.json">
 	<div class="wrap">
-		<h1>MQTT ILCA7 Sailboat Publisher</h1>
+		<h1>MQTT ILCA7 Publisher</h1>
 
 		<div class="row">
 			<div class="card half">
@@ -157,6 +174,25 @@
 	</div>
 
 	<script>
+		// Password gate logic
+		const pwGate = document.getElementById('pwGate');
+		const pwInput = document.getElementById('pwInput');
+		const pwBtn = document.getElementById('pwBtn');
+		const pwMsg = document.getElementById('pwMsg');
+		pwBtn.onclick = function() {
+			if (pwInput.value === 'ripsbusk') {
+				pwGate.style.display = 'none';
+			} else {
+				pwMsg.style.display = 'block';
+				pwInput.value = '';
+				pwInput.focus();
+			}
+		};
+		pwInput.addEventListener('keydown', function(e) {
+			if (e.key === 'Enter') pwBtn.click();
+		});
+		// Autofocus on load
+		window.onload = function() { pwInput.focus(); };
 		const $ = id => document.getElementById(id);
 		let client=null, timer=null, seq=0;
 
